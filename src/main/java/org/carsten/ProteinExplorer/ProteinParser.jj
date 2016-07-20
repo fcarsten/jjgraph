@@ -1,0 +1,157 @@
+options {
+  STATIC = false;
+  SANITY_CHECK = true;
+  FORCE_LA_CHECK = true;
+}
+
+PARSER_BEGIN (ProteinParser)
+
+package org.carsten.ProteinExplorer;
+
+/**
+ * ProteinParser.java
+ *
+ *
+ * Created: Fri Feb 26 13:50:26 1999
+ *
+ * @author Carsten Friedrich
+ * @version
+ */
+
+import java.io.*;
+import java.util.*;
+import java.awt.*;
+import java.net.*;
+
+import org.carsten.jjgraph.util.*;
+import org.carsten.jjgraph.graph.*;
+
+public class ProteinParser implements JJGraphParser
+{
+ JJGraph graph;
+ JJWindowList windows;
+ Map nameToNode = new HashMap();
+ Set actionSet = new HashSet();
+ Color blue = new Color(0,0,255);
+ Color green = new Color(0,255,0);
+ 
+ public boolean parse(JJGraph g)
+ {
+  g.setDirected(false);
+  
+  graph = g;
+  windows = graph.getWindows();
+  nameToNode.clear();
+  actionSet.clear();
+  
+  try {
+   parse();
+  }
+  catch (ParseException e) {
+   windows.printError("Parse error: " + e.getMessage());
+   return false;
+  }
+  for(Iterator iter = windows.iterator(); iter.hasNext();){
+   JJGraphWindow fenster = (JJGraphWindow)iter.next();
+   fenster.addTool(new JJProteinInspector(fenster, actionSet));
+  }
+  
+  return true;
+ }
+
+ static String trimString(String s)
+ {
+  //  return s.substring(0,s.length() -1);
+  return s;
+ }
+ 
+}
+
+PARSER_END (ProteinParser)
+
+SKIP :
+{
+  " "
+| "\t"
+}
+
+TOKEN :
+{
+ < NL: ("\n" | "\r") >
+ | < STRING: (~["\t","\n","\r"] )+ >
+}
+
+// | < STRING: ( ["a"-"z","-","A"-"Z","_","0"-"9","."] )+ >
+
+void parse() :
+{
+  Debug.println("Parsing crc format");
+}
+{
+ (parseProteins())* <EOF>
+}
+
+void parseProteins(): 
+{
+ Token p1,p2;
+ StringBuffer action= new StringBuffer("");
+}
+{
+
+ p1 = <STRING> p2 = <STRING> (parseAction(action))* (<NL>)+
+  {
+   String s1 = p1.image.trim();
+   
+   JJNode n1 = (JJNode)nameToNode.get(s1);
+   if(n1 == null){
+    n1 = graph.addNode();
+    n1.setName(s1);
+    nameToNode.put(s1, n1);
+    for(Iterator iter = windows.iterator(); iter.hasNext();){
+     JJGraphWindow w= (JJGraphWindow) iter.next();
+     n1.getGraphicNode(w).setColor(green);
+     
+    }
+    
+   }
+
+   String s2 = p2.image.trim();
+   
+   JJNode n2 = (JJNode)nameToNode.get(s2);
+   if(n2 == null){
+    n2 = graph.addNode();
+    n2.setName(s2);
+    nameToNode.put(s2, n2);
+    for(Iterator iter = windows.iterator(); iter.hasNext();){
+     JJGraphWindow w= (JJGraphWindow) iter.next();
+     n2.getGraphicNode(w).setColor(green);
+     
+    }
+   }
+   
+   JJEdge e = graph.addEdge(n1,n2);
+   String es = action.toString().trim();
+   
+   e.setName(es);
+   actionSet.add(es);
+   for(Iterator iter = windows.iterator(); iter.hasNext();){
+    JJGraphWindow w= (JJGraphWindow) iter.next();
+    e.getGraphicEdge(w).setColor(blue);
+   }
+   
+   Debug.println("Protein 1: " + s1 + ", Protein 2: " + s2 +
+                 " action: " + es);
+  }
+}
+
+void parseAction(StringBuffer action):
+{
+ Token t;
+}
+{
+ t = <STRING> 
+  {
+   action.append(t.image);
+   // Debug.println("Parsing action: " + t.image);
+  }
+}

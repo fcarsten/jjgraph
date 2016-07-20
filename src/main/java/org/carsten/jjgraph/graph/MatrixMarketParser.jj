@@ -1,0 +1,152 @@
+/**
+ * Copyright 1999-2016 Carsten Friedrich (Carsten.Friedrich@gmail.com)
+ * Contributions by Falk Schreiber, Francois Bertault, Damian Merrick, and probably others
+ * License: GNU GENERAL PUBLIC LICENSE 3.0 (https://www.gnu.org/copyleft/gpl.html)
+ *
+ */
+options {
+  STATIC = false;
+  SANITY_CHECK = true;
+  FORCE_LA_CHECK = true;
+}
+
+PARSER_BEGIN (MatrixMarketParser)
+
+package org.carsten.jjgraph.graph;
+
+/**
+ * MatrixMarketParser.java
+ *
+ *
+ * Created: Fri Feb 26 13:50:26 1999
+ *
+ * @author Carsten Friedrich
+ * @version
+ */
+
+import java.io.*;
+import java.util.*;
+import java.awt.*;
+import java.net.*;
+
+import org.carsten.jjgraph.util.*;
+
+public class MatrixMarketParser implements JJGraphParser
+{
+ JJNode nodeArray[];
+ JJGraph graph;
+ JJWindowList fenster;
+
+ public boolean parse(JJGraph g)
+ {
+  graph = g;
+  fenster = g.getWindows();
+  
+  try {
+   parse();
+  }
+  catch (ParseException e) {
+   fenster.printError("Parse error: " + e.getMessage());
+   return false;
+  }
+  
+  return true;
+ }
+
+ static String trimString(String s)
+ {
+  return s.substring(1,s.length() -1);
+ }
+ 
+}
+
+PARSER_END (MatrixMarketParser)
+
+SKIP :
+{
+  " "
+| "\t"
+| "\n"
+| "\r"
+| "="
+}
+
+TOKEN :
+{
+ < NUM: ( ("-")? ["0" - "9"] )+ >
+ | < FIRSTLINE: "%%MatrixMarket" >
+ | < FLOAT: ("-")? (["0"-"9"])+ "." (["0"-"9"])* ("e" ("+"|"-") (["0"-"9"])*)? >
+ | < WORD: ["a"-"z","A"-"Z","_","."] ( ["a"-"z","A"-"Z","_","0"-"9","."] )* >
+}
+
+void parse() throws ParseException :
+{
+}
+{
+ {
+  Debug.println("Parsing matrix market format");
+ }
+ firstLine()
+   size() 
+  (entry())+
+ <EOF>
+}
+
+void firstLine() throws ParseException :
+{
+ Token kind, format, type, symmetry;
+}
+{
+ <FIRSTLINE> kind = <WORD> format = <WORD> type = <WORD> symmetry = <WORD> 
+  {
+   if( ! (format.image.equals("coordinate") && type.image.equals("real")
+          && kind.image.equals("matrix"))){
+    throw new ParseException("Parse error: unsupported sub-format " + format+
+                          " " + type);
+   }
+   if(symmetry.image.equals("general")){
+    graph.setDirected(true);
+   } 
+   else
+    {
+     graph.setDirected(false);
+    }
+  }
+}
+
+
+ void entry() :
+  {
+   Token xs,ys,ws;
+  }
+ {
+  xs = <NUM> ys = <NUM> ws = <FLOAT> {
+   int x = Integer.parseInt(xs.image)-1;
+   int y = Integer.parseInt(ys.image)-1;
+   double w = Double.parseDouble(ws.image);
+   JJEdge e = graph.addEdge(nodeArray[x], nodeArray[y]);
+   e.setWeight(w);
+  }
+  
+ }
+ 
+void size() throws ParseException :
+ {
+  Token xs,ys,es;
+ }
+{
+ xs = <NUM> ys = <NUM> es = <NUM> {
+  int x = Integer.parseInt(xs.image);
+  int y = Integer.parseInt(ys.image);
+  int e = Integer.parseInt(es.image);
+  if(x != y){
+   throw new ParseException("Matrix not square");
+  }
+  Debug.println("Creating " + x + " nodes");
+  nodeArray = new JJNode[x];
+  for(int i=0; i<x; i++){
+   nodeArray[i] = graph.addNode();
+  }
+ }
+ 
+}

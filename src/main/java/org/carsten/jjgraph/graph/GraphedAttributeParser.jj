@@ -1,0 +1,530 @@
+/**
+ * Copyright 1999-2016 Carsten Friedrich (Carsten.Friedrich@gmail.com)
+ * Contributions by Falk Schreiber, Francois Bertault, Damian Merrick, and probably others
+ * License: GNU GENERAL PUBLIC LICENSE 3.0 (https://www.gnu.org/copyleft/gpl.html)
+ *
+ */
+options {
+  STATIC = false;
+  SANITY_CHECK = true;
+  FORCE_LA_CHECK = true;
+}
+
+PARSER_BEGIN (GraphedAttributeParser)
+
+package org.carsten.jjgraph.graph;
+
+/**
+ * GraphedAttributeParser.java
+ *
+ *
+ * Created: Fri Feb 26 13:50:26 1999
+ *
+ * @author Carsten Friedrich
+ * @version
+ */
+
+import java.io.*;
+import java.util.*;
+import java.awt.*;
+import java.net.*;
+
+import org.carsten.jjgraph.util.*;
+
+public class GraphedAttributeParser implements JJGraphParser
+{
+ HashMap nodeMap = new HashMap();
+ // HashMap nodeSerialMap = new HashMap();
+ JJNode currentNode = null;
+ // JJEdge currentEdge = null;
+ JJGraph graph;
+ JJWindowList windows;
+
+ public boolean parse(JJGraph g)
+ {
+  graph = g;
+  windows = g.getWindows();
+  
+  currentNode = null;
+  // currentEdge = null;
+  nodeMap.clear();
+  // nodeSerialMap.clear();
+  for(Iterator iter=graph.nodeIterator();iter.hasNext();){
+   JJNode tmpN = (JJNode) iter.next();
+   // nodeSerialMap.put(new Long(tmpN.getSerialNumber()), tmpN);
+   nodeMap.put(new Long(tmpN.getSerialNumber()), tmpN);
+  }
+  
+  try {
+   parse();
+  }
+  catch (ParseException e) {
+   windows.printError("Parse error: " + e.getMessage());
+   return false;
+  }
+  
+  return true;
+ }
+
+ JJNode getNodeForId(long id) throws ParseException
+ {
+  Long ID = new Long(id);
+ 
+  JJNode cn  = (JJNode) nodeMap.get(ID);
+  if(cn == null){
+   throw new ParseException("Couldn't find node with SN:" + id);
+  }
+  return cn;
+ }
+
+ static String trimString(String s)
+ {
+  return s.substring(1,s.length() -1);
+ }
+ 
+}
+
+PARSER_END (GraphedAttributeParser)
+
+SKIP :
+{
+  " "
+| "\t"
+| "\n"
+| "\r"
+| "="
+}
+
+TOKEN :
+{
+ < NUM: ( ("-")? ["0" - "9"] )+ >
+ | < STRING: "\"" (~["\""] | "\\\"" )* "\"" >
+ | < START_COMMENT: "{$" >
+ | < END_COMMENT: "$}" >
+ | < GRAPH: "GRAPH" >
+ | < DIRECTION: ("UN")? "DIRECTED" >
+ | < FF_C: ("FF_C" | "JJ_C") >
+ | < FF_3D: "FF_3D" >
+ | < JJ_HIDDEN: "JJ_HIDDEN" >
+ | < JJ_APP: "JJ_APP" >
+ | < NP: "NP" >
+ | < JCOLOR: "JCOLOR" >
+ | < FF_WE: "FF_WE" >
+ | < END: "END" >
+ | < WORD: ["a"-"z","A"-"Z","_","."] ( ["a"-"z","A"-"Z","_","0"-"9","."] )* >
+}
+
+void parse() :
+{
+}
+{
+ {
+  Debug.println("Parsing graphed format");
+ }
+ <GRAPH> graphName() direction() 
+ (graphComment())?
+ (parseNode())*
+ <END>
+ <EOF>
+}
+
+void parseEdge() :
+{}
+{
+  edgeId() 
+  (edgeComment())?
+  edgeName()
+}
+
+void parseNode() : 
+{
+}
+{
+  nodeId() (nodeComment())? (nodeName() | parseEdge())* ";"
+}
+
+void nodeId() :
+{
+ Token t;
+}
+{
+ t=<NUM> 
+  {
+   // Debug.println("node: " + t.image);
+   long id = Long.parseLong(t.image);
+   // Long ID = new Long(id);
+   currentNode = getNodeForId(id);
+   if(windows!=null){
+    for(Iterator iter= windows.iterator(); iter.hasNext();){
+     JJGraphicNode gn = currentNode.getGraphicNode((JJGraphWindow)iter.next());
+     if(gn != null)
+      gn.getVisible().clear();  
+    }
+   }
+  }
+}
+
+void nodeName() :
+{
+ Token t;
+}
+{
+ t=<STRING> 
+  {
+   // Debug.println("node name: " + t.image);
+   currentNode.setName( trimString(t.image) );
+  }
+}
+
+void edgeId() :
+{
+ Token t;
+}
+{
+ t=<NUM> 
+  {
+//     int id = Integer.parseInt(t.image);
+//     JJNode target = getNodeForId(id); //(JJNode) nodeMap.get(ID);
+//     currentEdge = graph.addEdge(currentNode, target);
+  }
+}
+
+void edgeName() :
+{
+ Token t;
+}
+{
+ t=<STRING> 
+  {
+   // Debug.println("edge name: " + t.image);
+   //   currentEdge.setName( trimString(t.image));
+  }
+}
+
+void graphName() : 
+{
+  Token t;
+}
+{
+  t=<STRING>
+  {
+   // Debug.println("Graph name " + t.image);
+   if(graph.getName().equals("")){ // Are we just pasting???
+    graph.setName(trimString(t.image));
+   }
+      
+  }
+}
+
+void direction() :
+{ Token t;
+}
+{
+ t=<DIRECTION>
+ {
+  if(t.image.equals("DIRECTED"))
+  {
+   // Debug.println("Graph is directed");
+   if(graph.getNumNodes() == 0) // Are we pasting ???
+     graph.setDirected(true);
+  }
+  else{
+   // Debug.println("Graph is undirected");   
+   if(graph.getNumNodes() == 0) // Are we pasting ???
+    graph.setDirected(false);
+  }
+ }
+}
+
+void graphComment() : 
+{ 
+}
+{
+ {
+  // Debug.println("Parsing comment");
+ }
+ 
+ <START_COMMENT> (nextThing())* <END_COMMENT> 
+}
+
+void coordList() :
+{
+}
+{
+ (coordTriple())+
+}
+
+void coordTriple () :
+{
+ Token xs,ys,zs;
+ 
+}
+{
+ xs = <NUM> ys = <NUM> zs = <NUM>
+ {
+  int x = Integer.parseInt(xs.image);
+  int y = Integer.parseInt(ys.image);
+  int z = Integer.parseInt(zs.image);
+  //  Debug.println("x,y,z: "+ x +","+y+","+z);
+//    JJGraphicEdge ge = currentEdge.getGraphicEdge();
+//    ge.addBendLast(new JJPoint(x,y,z));
+ }
+ 
+}
+
+void nodeComment() : 
+{ 
+}
+{
+ {
+  // Debug.println("Parsing comment");
+ }
+ 
+ <START_COMMENT> (nodeInternal())* <END_COMMENT> 
+}
+
+void nodeInternal() :
+{
+ Token t,xs,ys,zs,rs,gs,bs;
+}
+{
+ <NP> xs=<NUM> ys=<NUM>
+  {
+   int x = Integer.parseInt(xs.image);
+   int y = Integer.parseInt(ys.image);
+   if((currentNode != null)&&(windows!=null)){
+    for(Iterator iter= windows.iterator(); iter.hasNext();){
+     JJGraphWindow f = (JJGraphWindow)iter.next();
+     JJGraphicNode gn = currentNode.getGraphicNode(f);
+     if(gn!=null)
+      f.moveNodeTo(gn, x, y);
+    }
+   }
+  }
+ | <FF_C> t=<STRING>
+  {
+   String col = trimString(t.image);
+   if(! col.startsWith("#"))
+    {
+     Color tc = X11ColorConverter.getColor(col);
+     // Debug.println("Looking up " + col +".  ");
+           
+     if(tc == null) {
+      Debug.println("Don't understand color " + col);
+     } else {
+      if(windows!=null){
+       for(Iterator iter= windows.iterator(); iter.hasNext();){
+        JJGraphicNode gn = 
+         currentNode.getGraphicNode((JJGraphWindow)iter.next());
+        gn.setColor(tc);
+       }
+      }
+     }
+    }
+   else{
+    int red= Integer.parseInt(col.substring(1,3), 16);
+    int green= Integer.parseInt(col.substring(3,5), 16);
+    int blue= Integer.parseInt(col.substring(5,7), 16);
+    if(windows!=null){
+     for(Iterator iter= windows.iterator(); iter.hasNext();){
+      JJGraphicNode gn = 
+       currentNode.getGraphicNode((JJGraphWindow)iter.next());
+      gn.setColor(new Color(red,green,blue));
+     }
+    }
+   }
+  }
+ | <FF_3D> xs=<NUM> ys=<NUM> zs=<NUM>
+  {
+   x = Integer.parseInt(xs.image);
+   y = Integer.parseInt(ys.image);
+   int z = Integer.parseInt(zs.image);
+   if((currentNode != null)&&(windows!=null)){
+    for(Iterator iter= windows.iterator(); iter.hasNext();){
+     JJGraphWindow f = (JJGraphWindow)iter.next();
+     JJGraphicNode gn = currentNode.getGraphicNode(f);
+     if(gn!=null)
+      f.moveNodeTo(gn, x, y, z);
+    }
+   }
+  }
+ | <JCOLOR> rs=<NUM> gs=<NUM> bs=<NUM>
+  {
+   int red = Integer.parseInt(rs.image);
+   int green = Integer.parseInt(gs.image);
+   int blue = Integer.parseInt(bs.image); 
+         
+   if(windows!=null){
+    for(Iterator iter= windows.iterator(); iter.hasNext();){
+     JJGraphicNode gn = 
+      currentNode.getGraphicNode((JJGraphWindow)iter.next());
+     gn.setColor(new Color(red,green,blue));
+    }
+   }
+  }
+ | <JJ_HIDDEN>
+   {
+   if((currentNode != null)&&(windows!=null)){
+    for(Iterator iter= windows.iterator(); iter.hasNext();){
+     JJGraphWindow f = (JJGraphWindow)iter.next();
+     JJGraphicNode gn = currentNode.getGraphicNode(f);
+     if(gn!=null)
+      gn.setVisible(((JJGraphWindowImpl)f).HIDDEN, true);
+    }
+   }
+   }
+ | <JJ_APP> t=<STRING>
+    {
+   if((currentNode != null)&&(windows!=null)){
+    for(Iterator iter= windows.iterator(); iter.hasNext();){
+     JJGraphWindow f = (JJGraphWindow)iter.next();
+     JJGraphicNode gn = currentNode.getGraphicNode(f);
+     if((gn!=null) && (gn instanceof JJGraphicNodeImpl))
+     {
+      JJGraphicNodeImpl gni = (JJGraphicNodeImpl) gn;
+      
+      try{
+       Class appClass = Class.forName(trimString(t.image));
+       JJGraphicNodeAppearance gna = 
+        (JJGraphicNodeAppearance) appClass.newInstance();
+       gna.init(gni);
+       if(gna instanceof JJGraphicNodeImage){
+        t= getNextToken();
+        String fileName= trimString(t.image);
+        if( ! fileName.equals("")){
+         Image image = null;
+         URL url=null;
+         
+         try{
+          url = new URL(fileName); // cl.findResource(fileName);
+          
+          image = Toolkit.getDefaultToolkit().createImage(url);
+         }
+         catch(MalformedURLException me){
+          URLClassLoader cl = 
+           (URLClassLoader) JJGraphImpl.class.getClassLoader();
+          url = cl.findResource(fileName);
+          image = Toolkit.getDefaultToolkit().createImage(url);
+         }
+         catch(Exception e){
+          Debug.println("Couldn't load image: " + fileName);
+         }
+         finally{
+          JJGraphicNodeImage gnimage = (JJGraphicNodeImage)gna;
+          gnimage.setImageURL(url);
+          gnimage.setImage(image);
+         }
+        }
+       }
+       
+       gni.setAppearance(gna);
+      }
+      catch (Exception e){
+       Debug.println("Couldn't apply appearance: " + e.getMessage());
+      }
+     }
+    }
+   }
+    }
+ 
+ | <WORD> (numberOrString())*
+}
+
+void edgeInternal() :
+{
+ Token t;
+}
+{
+ t=<FF_C>
+  {
+   t = getNextToken();
+   String col = trimString(t.image);
+   if(! col.startsWith("#"))
+    {
+     Color tc = X11ColorConverter.getColor(col);
+     // Debug.println("Looking up " + col +".  ");
+           
+     if(tc == null) {
+      Debug.println("Don't understand color " + col);
+     } else {
+       // currentEdge.setColor(tc);
+     }
+    }
+   else{
+    int red= Integer.parseInt(col.substring(1,3), 16);
+    int green= Integer.parseInt(col.substring(3,5), 16);
+    int blue= Integer.parseInt(col.substring(5,7), 16);
+    
+    // currentEdge.setColor(new Color(red,green,blue));
+   }
+  }
+ | t=<FF_3D> <NUM> <NUM> <NUM> coordList() 
+  {
+   // currentEdge.getGraphicEdge().removeBendLast();
+  }
+ | t=<JCOLOR>
+  {
+   t = getNextToken();
+   int red = Integer.parseInt(t.image);
+   t = getNextToken();
+   int green = Integer.parseInt(t.image);
+   t = getNextToken();
+   int blue = Integer.parseInt(t.image); 
+         
+   // currentEdge.setColor(new Color(red,green,blue));
+  }
+ | t=<FF_WE>
+  {
+   t = getNextToken();
+   // currentEdge.setWeight(Integer.parseInt(t.image)/100.0);
+  }
+ | <WORD> (numberOrString())*
+ 
+}
+
+void edgeComment() : 
+{ 
+}
+{
+ {
+  // Debug.println("Parsing comment");
+ }
+ 
+ <START_COMMENT> (edgeInternal())* <END_COMMENT> 
+}
+
+void nextThing() :
+{
+ Token t;
+}
+{
+ t=<STRING>
+  {
+   // Debug.println("String: " + t.image);
+  }
+ |
+ t=<NUM>
+  {
+   // Debug.println("Number: " + t.image);
+  }
+ | t=<WORD>
+  {
+   // Debug.println("Word: " + t.image);
+  }
+}
+
+void numberOrString() :
+{
+ Token t;
+}
+{
+ t=<STRING>
+  {
+   // Debug.println("String: " + t.image);
+  }
+ |
+ t=<NUM>
+  {
+   // Debug.println("Number: " + t.image);
+  }
+}
